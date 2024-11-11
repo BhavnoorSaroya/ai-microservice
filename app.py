@@ -8,7 +8,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 import base64
-
+import jwt
+import requests
 private_key = None
 public_key = None
 
@@ -50,7 +51,7 @@ def create_signature(payload, private_key):
     return base64.b64encode(signature).decode('utf-8')
 
 def verify_signature(payload, signature):
-    # return True # For now, always return True to bypass signature verification
+    return True # For now, always return True to bypass signature verification
     """
     Verifies the signature of the given payload using the public key.
 
@@ -86,44 +87,69 @@ def verify_signature(payload, signature):
 
 
 # Alternatively, for the entire app, add a global options handler
-@app.before_request
-def before_request():
-    # response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-    # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
-    if request.method == 'OPTIONS':
-        response = jsonify({"message": "Preflight OK"})
-        response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-        # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.status_code = 200
-        return response
-    signature_header = request.headers.get('x-gateway-signature')
-    if signature_header is None:
-        return jsonify({'message': 'Invalid request, needs to be signed'}), 401
+# @app.before_request
+# def before_request():
+#     # response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
+#     # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
+#     if request.method == 'OPTIONS':
+#         response = jsonify({"message": "Preflight OK"})
+#         response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
+#         # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
+#         response.headers['Access-Control-Allow-Credentials'] = 'true'
+#         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+#         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+#         response.status_code = 200
+#         return response
+#     signature_header = request.headers.get('x-gateway-signature')
     
-    # Extract the payload (in this example, we use the raw request data)
-    # Adjust this as needed to match how the payload is constructed on your side
-    # payload = request.method + request.url + request.data.decode('utf-8')
-    payload = request.method + request.path
-    # print("url", request.url)
-    # print("payload", payload)
-    print("signature", request.method + request.path)
+    
+#     if signature_header is None:
+#         return jsonify({'message': 'Invalid request, needs to be signed'}), 401
+    
+#     # Extract the payload (in this example, we use the raw request data)
+#     # Adjust this as needed to match how the payload is constructed on your side
+#     # payload = request.method + request.url + request.data.decode('utf-8')
+#     payload = request.method + request.path
+#     # print("url", request.url)
+#     # print("payload", payload)
+#     print("signature", request.method + request.path)
 
 
-    # Verify the signature
-    if verify_signature(payload, signature_header):
-        pass  # Continue processing the request
+#     # Verify the signature
+#     if verify_signature(payload, signature_header):
+#         pass  # Continue processing the request
 
-    else:
-        return jsonify({'message': 'Invalid signature'}), 403
+#     else:
+#         return jsonify({'message': 'Invalid signature'}), 403
 
 
 @app.route('/detect', methods=['POST'])
 def detect_objects():
+    # email = request.json.email
+    token = request.cookies.get('jwt')
+    if not token:
+        return jsonify({'message':'we couldn\'t figure out who you were'}), 401
+    
+    try:
+        decoded_token = jwt.decode(token, private_key, algorithms=["RS256"])
+        email = decoded_token.get('email')
+        if not email:
+            return jsonify({'message':'we couldn\'t figure out who you were'}), 401
+            
+    except Exception as e:
+        return jsonify({"err": "no good"}), 400
+    
+    
+    
+        
     if 'image' not in request.files:
         return jsonify({"error": "No image uploaded"}), 400
+
+    if email:
+        response = requests.post(
+            USER_SERVICE_URL+"/increase/"+email, 
+            headers={'x-gateway-signature': create_signature(request.method + request.path, SIGNER_KEY)}
+        )
 
     file = request.files['image']
     image = Image.open(file.stream).convert('RGB')
