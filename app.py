@@ -134,6 +134,7 @@ def detect_objects():
     try:
         decoded_token = jwt.decode(token, public_key, algorithms=["RS256"])
         email = decoded_token.get('email')
+        print(email)
         if not email:
             return jsonify({'message':'we couldn\'t figure out who you were'}), 401
             
