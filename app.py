@@ -149,10 +149,12 @@ def detect_objects():
         return jsonify({"error": "No image uploaded"}), 400
 
     if email:
+        print(email)
         response = requests.post(
             USER_SERVICE_URL+"/increase/"+email, 
             headers={'x-gateway-signature': create_signature(request.method + request.path, SIGNER_KEY)}
         )
+        print(response)
 
     file = request.files['image']
     image = Image.open(file.stream).convert('RGB')
