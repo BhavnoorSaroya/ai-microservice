@@ -51,7 +51,7 @@ def create_signature(payload, private_key):
     return base64.b64encode(signature).decode('utf-8')
 
 def verify_signature(payload, signature):
-    return True # For now, always return True to bypass signature verification
+    # return True # For now, always return True to bypass signature verification
     """
     Verifies the signature of the given payload using the public key.
 
@@ -87,40 +87,40 @@ def verify_signature(payload, signature):
 
 
 # Alternatively, for the entire app, add a global options handler
-# @app.before_request
-# def before_request():
-#     # response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-#     # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
-#     if request.method == 'OPTIONS':
-#         response = jsonify({"message": "Preflight OK"})
-#         response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-#         # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
-#         response.headers['Access-Control-Allow-Credentials'] = 'true'
-#         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-#         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-#         response.status_code = 200
-#         return response
-#     signature_header = request.headers.get('x-gateway-signature')
+@app.before_request
+def before_request():
+    # response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
+    # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
+    if request.method == 'OPTIONS':
+        response = jsonify({"message": "Preflight OK"})
+        response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
+        # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.status_code = 200
+        return response
+    signature_header = request.headers.get('x-gateway-signature')
     
     
-#     if signature_header is None:
-#         return jsonify({'message': 'Invalid request, needs to be signed'}), 401
+    if signature_header is None:
+        return jsonify({'message': 'Invalid request, needs to be signed'}), 401
     
-#     # Extract the payload (in this example, we use the raw request data)
-#     # Adjust this as needed to match how the payload is constructed on your side
-#     # payload = request.method + request.url + request.data.decode('utf-8')
-#     payload = request.method + request.path
-#     # print("url", request.url)
-#     # print("payload", payload)
-#     print("signature", request.method + request.path)
+    # Extract the payload (in this example, we use the raw request data)
+    # Adjust this as needed to match how the payload is constructed on your side
+    # payload = request.method + request.url + request.data.decode('utf-8')
+    payload = request.method + request.path
+    # print("url", request.url)
+    # print("payload", payload)
+    print("signature", request.method + request.path)
 
 
-#     # Verify the signature
-#     if verify_signature(payload, signature_header):
-#         pass  # Continue processing the request
+    # Verify the signature
+    if verify_signature(payload, signature_header):
+        pass  # Continue processing the request
 
-#     else:
-#         return jsonify({'message': 'Invalid signature'}), 403
+    else:
+        return jsonify({'message': 'Invalid signature'}), 403
 
 
 @app.route('/detect', methods=['POST'])
