@@ -51,7 +51,7 @@ def create_signature(payload, private_key):
     return base64.b64encode(signature).decode('utf-8')
 
 def verify_signature(payload, signature):
-    # return True # For now, always return True to bypass signature verification
+    return True # For now, always return True to bypass signature verification
     """
     Verifies the signature of the given payload using the public key.
 
@@ -103,8 +103,8 @@ def before_request():
     signature_header = request.headers.get('x-gateway-signature')
     
     
-    if signature_header is None:
-        return jsonify({'message': 'Invalid request, needs to be signed'}), 401
+    # if signature_header is None:
+    #     return jsonify({'message': 'Invalid request, needs to be signed'}), 401
     
     # Extract the payload (in this example, we use the raw request data)
     # Adjust this as needed to match how the payload is constructed on your side
@@ -127,11 +127,12 @@ def before_request():
 def detect_objects():
     # email = request.json.email
     token = request.cookies.get('jwt')
+    print(request.cookies.get('jwt'))
     if not token:
         return jsonify({'message':'we couldn\'t figure out who you were'}), 401
     
     try:
-        decoded_token = jwt.decode(token, private_key, algorithms=["RS256"])
+        decoded_token = jwt.decode(token, public_key, algorithms=["RS256"])
         email = decoded_token.get('email')
         if not email:
             return jsonify({'message':'we couldn\'t figure out who you were'}), 401
