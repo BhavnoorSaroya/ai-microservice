@@ -68,7 +68,7 @@ def verify_signature(payload, signature):
         
         # Create a verifier with the public key
         # verifier = PKCS1_v1_5.new(public_key)
-        print(decoded_signature)
+        # print(decoded_signature)
 
         SIGNATURE_KEY.verify(
             decoded_signature,
@@ -137,12 +137,14 @@ def detect_objects():
             return jsonify({'message':'we couldn\'t figure out who you were'}), 401
             
     except Exception as e:
+        print("not able to decode the token")
         return jsonify({"err": "no good"}), 400
     
     
     
         
     if 'image' not in request.files:
+        print("no image")
         return jsonify({"error": "No image uploaded"}), 400
 
     if email:
