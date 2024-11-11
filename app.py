@@ -153,7 +153,10 @@ def detect_objects():
         print(email)
         response = requests.post(
             USER_SERVICE_URL+"/increase/"+email, 
-            headers={'x-gateway-signature': create_signature(request.method + request.path, SIGNER_KEY)}
+            headers={'x-gateway-signature': create_signature
+                     (request.method + 
+                      f'/increase/{email}',
+                      SIGNER_KEY)}
         )
         print(response)
 
