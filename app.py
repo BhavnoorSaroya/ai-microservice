@@ -159,6 +159,14 @@ def detect_objects():
                       SIGNER_KEY)}
         )
         print(response)
+    
+    if response.status_code == 200:
+        counter = response.json().get('counter') # Get the number of api calls the user has made
+        
+    if counter > 20:
+        counter = f"warning: api calls exceeded: {counter}"
+    else:
+        counter = f"api calls: {counter}"
 
     file = request.files['image']
     image = Image.open(file.stream).convert('RGB')
@@ -169,6 +177,22 @@ def detect_objects():
 
     # Get annotated image
     annotated_image = results[0].plot()
+
+        
+    # Convert image to a format OpenCV can work with
+    annotated_image_cv = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
+
+    # Add the counter value to the image
+    cv2.putText(
+        annotated_image_cv,
+        f"Counter: {counter}",
+        (10, 30),  # Position at the top-left corner
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,  # Font size
+        (255, 0, 0),  # Text color (Blue in BGR format)
+        2,  # Thickness of the text
+        cv2.LINE_AA
+    )
 
     # Convert image to bytes for response
     _, buffer = cv2.imencode('.jpg', annotated_image)
