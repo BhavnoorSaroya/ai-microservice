@@ -162,11 +162,12 @@ def detect_objects():
     
     if response.status_code == 200:
         counter = response.json().get('counter') # Get the number of api calls the user has made
+        print("api calls for this user:", counter)
         
     if counter > 20:
-        counter = f"warning: api calls exceeded: {counter}"
+        counter = f"Warning: api calls exceeded: {counter}"
     else:
-        counter = f"api calls: {counter}"
+        counter = f"Api calls: {counter}"
 
     file = request.files['image']
     image = Image.open(file.stream).convert('RGB')
@@ -183,9 +184,9 @@ def detect_objects():
     annotated_image_cv = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
 
     # Add the counter value to the image
-    cv2.putText(
+    annotated_image_cv = cv2.putText(
         annotated_image_cv,
-        f"Counter: {counter}",
+        f"{counter}",
         (10, 30),  # Position at the top-left corner
         cv2.FONT_HERSHEY_SIMPLEX,
         1,  # Font size
@@ -195,7 +196,7 @@ def detect_objects():
     )
 
     # Convert image to bytes for response
-    _, buffer = cv2.imencode('.jpg', annotated_image)
+    _, buffer = cv2.imencode('.jpg', annotated_image_cv)
     image_bytes = BytesIO(buffer)
 
     return send_file(image_bytes, mimetype='image/jpeg')
