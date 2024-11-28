@@ -1,197 +1,150 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response, render_template
 from ultralytics import YOLO
 import cv2
 import numpy as np
 from io import BytesIO
 from PIL import Image
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import serialization
 import base64
 import jwt
 import requests
-private_key = None
-public_key = None
 
-if private_key is None:
-    with open('private.pem', 'r') as f:
-        private_key = f.read()
-if public_key is None:
-    with open('public.pem', 'r') as f:
-        public_key = f.read()
-        
-FRONTEND_URL = 'https://isa-singh.azurewebsites.net'
-# USER_SERVICE_URL = 'http://localhost:5001'
-USER_SERVICE_URL = 'https://isa-database-microservice.onrender.com'
-SIGNATURE_KEY = serialization.load_pem_public_key(public_key.encode('utf-8'))
-SIGNER_KEY = serialization.load_pem_private_key(private_key.encode('utf-8'), password=None)# Utility function to create a JWT token using RS256
+# Load private and public keys
+with open('private.pem', 'rb') as f:
+    private_key = serialization.load_pem_private_key(
+        f.read(),
+        password=None
+    )
+with open('public.pem', 'rb') as f:
+    public_key = serialization.load_pem_public_key(
+        f.read()
+    )
 
-# Initialize the Flask app and YOLOv8 model
+FRONTEND_URL = 'http://localhost:8000'
+USER_SERVICE_URL = 'http://localhost:5001'
+
 app = Flask(__name__)
-model = YOLO('yolov8n.pt')  # Ensure you have the YOLOv8n weights available
-
-
+model = YOLO('yolo11n.pt')
 
 def create_signature(payload, private_key):
-    # Create a new SHA-256 hash of the payload
-    h = payload.encode('utf-8')
-    
-    # Create a signer with the private key
-    # signer = PKCS1_v1_5.new(private_key)
+    """
+    Creates a base64-encoded signature for the given payload using the provided private key.
+    """
     signature = private_key.sign(
-            h, 
-            padding.PKCS1v15(),
-            hashes.SHA256()
+        payload.encode('utf-8'),
+        padding.PKCS1v15(),
+        hashes.SHA256()
     )
-    
-    # Sign the payload
-    # signature = signer.sign(h)
-    
-    # Return the base64-encoded signature
     return base64.b64encode(signature).decode('utf-8')
 
 def verify_signature(payload, signature):
-    # return True # For now, always return True to bypass signature verification
     """
-    Verifies the signature of the given payload using the public key.
+    Verifies the base64-encoded signature of the given payload using the public key.
 
     :param payload: The original payload as a string.
     :param signature: The signature to verify, base64-encoded.
     :return: True if the signature is valid, False otherwise.
     """
     try:
-        # Create a new SHA-256 hash of the payload
-        # h = SHA256.new(payload.encode('utf-8'))
-        
-        # Decode the base64-encoded signature
         decoded_signature = base64.b64decode(signature)
-        
-        # Create a verifier with the public key
-        # verifier = PKCS1_v1_5.new(public_key)
-        # print(decoded_signature)
-
-        SIGNATURE_KEY.verify(
+        public_key.verify(
             decoded_signature,
             payload.encode('utf-8'),
             padding.PKCS1v15(),
             hashes.SHA256()
         )
-        
-        # Verify the signature
         print("Signature verified")
-        return True  # verifier.verify(h, decoded_signature)
+        return True
     except Exception as e:
         print(f"Verification failed: {e}")
-
         return False
 
-
-# Alternatively, for the entire app, add a global options handler
 @app.before_request
 def before_request():
-    # response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-    # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
+    """
+    Global request handler to verify signatures for protected routes.
+    Exempts the 'video_feed' and 'index' routes from signature verification.
+    """
+    # Exempt certain routes from signature verification
+    if request.endpoint in ['video_feed', 'index']:
+        return
+
     if request.method == 'OPTIONS':
         response = jsonify({"message": "Preflight OK"})
-        response.headers['Access-Control-Allow-Origin'] = 'https://isa-singh.azurewebsites.net'
-        # response.headers['Access-Control-Allow-Origin'] = 'localhost:8080'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.status_code = 200
+        response.headers.update({
+            'Access-Control-Allow-Origin': 'http://localhost:8000',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        })
         return response
+
     signature_header = request.headers.get('x-gateway-signature')
-    
-    
-    if signature_header is None:
+    if not signature_header:
         return jsonify({'message': 'Invalid request, needs to be signed'}), 401
-    
-    # Extract the payload (in this example, we use the raw request data)
-    # Adjust this as needed to match how the payload is constructed on your side
-    # payload = request.method + request.url + request.data.decode('utf-8')
+
     payload = request.method + request.path
-    # print("url", request.url)
-    # print("payload", payload)
-    print("signature", request.method + request.path)
+    print("Signature payload:", payload)
 
-
-    # Verify the signature
-    if verify_signature(payload, signature_header):
-        pass  # Continue processing the request
-
-    else:
+    if not verify_signature(payload, signature_header):
         return jsonify({'message': 'Invalid signature'}), 403
-
 
 @app.route('/detect', methods=['POST'])
 def detect_objects():
-    # email = request.json.email
+    """
+    Handles image uploads, performs object detection, overlays the API call counter,
+    and returns the annotated image.
+    """
     token = request.cookies.get('jwt')
-    print(request.cookies.get('jwt'))
     if not token:
-        return jsonify({'message':'we couldn\'t figure out who you were'}), 401
+        return jsonify({'message': "We couldn't figure out who you are"}), 401
     
     try:
         decoded_token = jwt.decode(token, public_key, algorithms=["RS256"])
         email = decoded_token.get('email')
-        print(email)
         if not email:
-            return jsonify({'message':'we couldn\'t figure out who you were'}), 401
-            
-    except Exception as e:
-        print("not able to decode the token")
-        return jsonify({"err": "no good"}), 400
-    
-    
-    
-        
+            return jsonify({'message': "We couldn't figure out who you are"}), 401
+    except Exception:
+        return jsonify({"err": "Invalid token"}), 400
+
     if 'image' not in request.files:
-        print("no image")
         return jsonify({"error": "No image uploaded"}), 400
 
-    if email:
-        print(email)
-        response = requests.post(
-            USER_SERVICE_URL+"/increase/"+email, 
-            headers={'x-gateway-signature': create_signature
-                     (request.method + 
-                      f'/increase/{email}',
-                      SIGNER_KEY)}
-        )
-        print(response)
+    # Increment the user's API call counter
+    response = requests.post(
+        f"{USER_SERVICE_URL}/increase/{email}",
+        headers={'x-gateway-signature': create_signature(f'/increase/{email}', private_key)}
+    )
     
     if response.status_code == 200:
-        counter = response.json().get('counter') # Get the number of api calls the user has made
-        print("api calls for this user:", counter)
-        
-    if counter > 20:
-        counter = f"Warning: api calls exceeded: {counter}"
+        counter = response.json().get('counter', 0)
     else:
-        counter = f"Api calls: {counter}"
+        return jsonify({"error": "Failed to update user counter"}), 500
+    
+    counter_message = f"Warning: API calls exceeded: {counter}" if counter > 20 else f"API calls: {counter}"
 
+    # Process the uploaded image
     file = request.files['image']
     image = Image.open(file.stream).convert('RGB')
-    image = np.array(image)
+    image_np = np.array(image)
 
     # Run object detection
-    results = model.predict(source=image, save=False, verbose=False)
+    results = model.predict(source=image_np, save=False, verbose=False)
 
     # Get annotated image
     annotated_image = results[0].plot()
-
-        
-    # Convert image to a format OpenCV can work with
     annotated_image_cv = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
 
-    # Add the counter value to the image
-    annotated_image_cv = cv2.putText(
+    # # Add the counter value to the image
+    cv2.putText(
         annotated_image_cv,
-        f"{counter}",
-        (10, 30),  # Position at the top-left corner
+        counter_message,
+        (10, 30),
         cv2.FONT_HERSHEY_SIMPLEX,
-        1,  # Font size
-        (255, 0, 0),  # Text color (Blue in BGR format)
-        2,  # Thickness of the text
+        1,
+        (255, 0, 0),
+        2,
         cv2.LINE_AA
     )
 
@@ -201,5 +154,54 @@ def detect_objects():
 
     return send_file(image_bytes, mimetype='image/jpeg')
 
+@app.route('/video-feed')
+def video():
+    """
+    Streams live video frames from the RTMP source, overlays the user's API call counter,
+    and increments the counter each time the stream is accessed.
+    # """
+    token = request.cookies.get('jwt')
+    if not token:
+        return jsonify({'message': "We couldn't figure out who you are"}), 401
+    
+    try:
+        decoded_token = jwt.decode(token, public_key, algorithms=["RS256"])
+        email = decoded_token.get('email')
+        if not email:
+            return jsonify({'message': "We couldn't figure out who you are"}), 401
+    except Exception:
+        return jsonify({"err": "Invalid token"}), 400
+    
+    # Increment the user's API call counter
+    response = requests.post(
+        f"{USER_SERVICE_URL}/increase/{email}",
+        headers={'x-gateway-signature': create_signature(f'/increase/{email}', private_key)}
+    )
+    
+    if response.status_code == 200:
+        counter = response.json().get('counter', 0)
+    else:
+        return jsonify({"error": "Failed to update user counter"}), 500
+
+    def generate_frames():
+        """
+        Generator function that streams video frames with the API call counter overlaid.
+        """
+        source = "rtmp://52.233.85.210/live/drone_stream"
+        results = model(source, stream=True)
+        for result in results:
+            annotated_frame = result.plot()
+
+            # Encode frame as JPEG
+            ret, buffer = cv2.imencode('.jpg', annotated_frame)
+            frame = buffer.tobytes()
+
+            # Yield the frame in byte format
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+    return Response(generate_frames(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5002)
