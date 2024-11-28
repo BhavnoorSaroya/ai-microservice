@@ -21,8 +21,8 @@ with open('public.pem', 'rb') as f:
         f.read()
     )
 
-FRONTEND_URL = 'http://localhost:8000'
-USER_SERVICE_URL = 'http://localhost:5001'
+FRONTEND_URL = 'https://isa-singh.azurewebsites.net'
+USER_SERVICE_URL = 'https://isa-database-microservice.onrender.com'
 
 app = Flask(__name__)
 model = YOLO('yolo11n.pt')
@@ -73,7 +73,7 @@ def before_request():
     if request.method == 'OPTIONS':
         response = jsonify({"message": "Preflight OK"})
         response.headers.update({
-            'Access-Control-Allow-Origin': 'http://localhost:8000',
+            'Access-Control-Allow-Origin': 'https://isa-singh.azurewebsites.net',
             'Access-Control-Allow-Credentials': 'true',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization'
