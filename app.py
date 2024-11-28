@@ -90,6 +90,36 @@ def before_request():
     if not verify_signature(payload, signature_header):
         return jsonify({'message': 'Invalid signature'}), 403
 
+NEW_URL = "https://77ee-207-81-66-250.ngrok-free.app"
+@app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+@app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+def proxy(path):
+    # Build the target URL
+    target_url = f"{NEW_URL}/{path}"
+    
+    # Forward headers and explicitly set the Host header to match the target
+    headers = {key: value for key, value in request.headers}
+    headers['Host'] = '77ee-207-81-66-250.ngrok-free.app'  # Replace with the actual host of your target URL
+    
+    # Forward the request to the new URL
+    response = requests.request(
+        method=request.method,
+        url=target_url,
+        headers=headers,
+        data=request.get_data(),
+        cookies=request.cookies,
+        allow_redirects=False,
+    )
+    
+    # Return the response from the new server
+    return Response(
+        response.content,
+        status=response.status_code,
+        headers=dict(response.headers),
+    )
+
+
+
 @app.route('/detect', methods=['POST'])
 def detect_objects():
     """
