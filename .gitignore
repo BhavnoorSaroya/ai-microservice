@@ -1,4 +1,4 @@
 public.pem
-private_signer_key.pem
+private.pem
 .idea/
 .venv/
